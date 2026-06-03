@@ -1,0 +1,209 @@
+{
+  "name": "PreFlight Checklist Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "preflightCheck",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "07504e89-9b64-4b60-914c-0d61f7c5b831",
+      "name": "Webhook",
+      "webhookId": "e2a200e1-982b-49a1-a986-9d2740b4c13a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Full dataset embedded\nconst dataset = [{\n        team: \"Alpha Squad\",\n        project: \"UserAuth Service\",\n        stage: \"PRD Definition\",\n        metric: \"Requirements Clarity Score\",\n        value: 7.2,\n        unit: \"score\",\n        thresholdGood: 8.0,\n        thresholdPoor: 5.0,\n        status: \"Warning\"\n    },\n    {\n        team: \"Alpha Squad\",\n        project: \"UserAuth Service\",\n        stage: \"PRD Review\",\n        metric: \"Review Cycle Count\",\n        value: 3,\n        unit: \"count\",\n        thresholdGood: 2,\n        thresholdPoor: 4,\n        status: \"Warning\"\n    },\n    {\n        team: \"Beta Team\",\n        project: \"Payment Gateway\",\n        stage: \"Tech Design\",\n        metric: \"Design Review Duration\",\n        value: 8,\n        unit: \"days\",\n        thresholdGood: 5,\n        thresholdPoor: 10,\n        status: \"Warning\"\n    },\n    {\n        team: \"Beta Team\",\n        project: \"Payment Gateway\",\n        stage: \"Coding\",\n        metric: \"Code Coverage Percentage\",\n        value: 78,\n        unit: \"percentage\",\n        thresholdGood: 85,\n        thresholdPoor: 70,\n        status: \"Warning\"\n    },\n    {\n        team: \"Gamma Engineers\",\n        project: \"Analytics Dashboard\",\n        stage: \"PR Review\",\n        metric: \"Average PR Review Time\",\n        value: 4.5,\n        unit: \"days\",\n        thresholdGood: 2,\n        thresholdPoor: 5,\n        status: \"Warning\"\n    },\n    {\n        team: \"Gamma Engineers\",\n        project: \"Analytics Dashboard\",\n        stage: \"Integration Testing\",\n        metric: \"Test Case Pass Rate\",\n        value: 92,\n        unit: \"percentage\",\n        thresholdGood: 90,\n        thresholdPoor: 70,\n        status: \"Good\"\n    },\n    {\n        team: \"Delta Force\",\n        project: \"Mobile App V2\",\n        stage: \"Functional Testing\",\n        metric: \"Defect Density\",\n        value: 2.3,\n        unit: \"defects per kloc\",\n        thresholdGood: 1.5,\n        thresholdPoor: 3.0,\n        status: \"Good\"\n    },\n    {\n        team: \"Delta Force\",\n        project: \"Mobile App V2\",\n        stage: \"Perf Testing\",\n        metric: \"Response Time P95\",\n        value: 180,\n        unit: \"milliseconds\",\n        thresholdGood: 200,\n        thresholdPoor: 500,\n        status: \"Good\"\n    },\n    {\n        team: \"Epsilon Squad\",\n        project: \"API Refactor\",\n        stage: \"Ready To Release\",\n        metric: \"Rollback Risk Score\",\n        value: 6.8,\n        unit: \"score\",\n        thresholdGood: 4.0,\n        thresholdPoor: 7.0,\n        status: \"Poor\"\n    },\n    {\n        team: \"Alpha Squad\",\n        project: \"Notification System\",\n        stage: \"Coding\",\n        metric: \"Technical Debt Ratio\",\n        value: 28,\n        unit: \"percentage\",\n        thresholdGood: 15,\n        thresholdPoor: 25,\n        status: \"Poor\"\n    },\n];\n\n// Extract inputs from webhook body\nconst teamName = $input.first().json.body.team_name;\nconst sdlcStage = $input.first().json.body.current_sdlc_stage;\n\nif (!teamName || !sdlcStage) {\n    throw new Error(\"Missing required inputs: team_name and current_sdlc_stage\");\n}\n\n// Filter matching records\nconst matches = dataset.filter(\n    r => r.team.toLowerCase() === teamName.toLowerCase() &&\n    r.stage.toLowerCase() === sdlcStage.toLowerCase()\n);\n\n// Determine overall severity\nlet overallStatus = \"Good\";\nif (matches.some(r => r.status === \"Poor\")) overallStatus = \"Poor\";\nelse if (matches.some(r => r.status === \"Warning\")) overallStatus = \"Warning\";\n\nreturn [{\n    json: {\n        teamName,\n        sdlcStage,\n        matches,\n        overallStatus,\n        hasRecords: matches.length > 0\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "debe1507-62b8-4b41-af6a-a2e5e7ee42fa",
+      "name": "DataLookUp"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { teamName, sdlcStage, matches, hasRecords } = $input.first().json;\nconst timestamp = new Date().toISOString().replace(\"T\", \" \").slice(0, 19) + \" UTC\";\n\nlet message;\n\nif (!hasRecords) {\n  message = `\nℹ️ **PRE-FLIGHT CHECK — NO HISTORICAL DATA**\n*Team:* ${teamName} | *Stage:* ${sdlcStage} | *Generated:* ${timestamp}\n\nNo historical records found for **${teamName}** at the **${sdlcStage}** stage.\n\nThis may be a new team or a new stage. Proceed with standard process diligence and ensure metrics are captured for future reference.\n`.trim();\n} else {\n  const metricRows = matches.map(m =>\n    `> ✅ **${m.metric}**: \\`${m.value} ${m.unit}\\``\n  ).join(\"\\n\");\n\n  message = `\n✅ **PRE-FLIGHT CHECK — ALL CLEAR**\n*Team:* ${teamName} | *Stage:* ${sdlcStage} | *Generated:* ${timestamp}\n\nAll historical metrics for this stage are within healthy thresholds. No blockers detected.\n\n${metricRows}\n\nYou're good to proceed. Keep it up! 🚀\n`.trim();\n}\n\nreturn [{ json: { message, status: \"Good\", teamName, sdlcStage } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -96
+      ],
+      "id": "80403763-7594-4313-a8d4-148b699cdeee",
+      "name": "OK Message"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { teamName, sdlcStage, matches, overallStatus } = $input.first().json;\n\nconst statusEmoji = overallStatus === \"Poor\" ? \"🚨\" : \"⚠️\";\nconst statusLabel = overallStatus === \"Poor\" ? \"CRITICAL\" : \"WARNING\";\nconst timestamp = new Date().toISOString().replace(\"T\", \" \").slice(0, 19) + \" UTC\";\n\n// Build the metric breakdown rows\nconst metricRows = matches.map(m => {\n  const icon = m.status === \"Poor\" ? \"🔴\" : \"🟡\";\n  return `> ${icon} **${m.metric}**: \\`${m.value} ${m.unit}\\` _(good: ${m.thresholdGood}, poor: ${m.thresholdPoor})_`;\n}).join(\"\\n\");\n\n// Remediation tips per stage\nconst remediationMap = {\n  \"coding\": [\n    \"Run `coverage report` and add tests for uncovered branches before merging.\",\n    \"Schedule a 30-min debt triage with the team to categorize and log items.\",\n    \"Block PRs that push debt ratio above threshold using a pre-commit hook.\",\n  ],\n  \"prd definition\": [\n    \"Conduct a structured requirements walkthrough with at least 2 stakeholders.\",\n    \"Use a clarity scoring rubric — flag any requirement scoring below 7/10.\",\n    \"Set a 48-hour freeze period before design handoff.\",\n  ],\n  \"prd review\": [\n    \"Cap review cycles at 2 — escalate blockers to the product lead after cycle 2.\",\n    \"Use async Loom reviews to reduce sync scheduling overhead.\",\n  ],\n  \"tech design\": [\n    \"Time-box design reviews to 90 minutes with a structured agenda.\",\n    \"Assign a design owner to drive decisions and prevent review sprawl.\",\n  ],\n  \"pr review\": [\n    \"Enforce a 24-hour PR review SLA via CODEOWNERS.\",\n    \"Break large PRs (>400 lines) into stacked smaller PRs.\",\n    \"Use a PR checklist template to reduce back-and-forth cycles.\",\n  ],\n  \"ready to release\": [\n    \"Validate rollback scripts in staging before cutting the release branch.\",\n    \"Enable canary analysis in your deployment pipeline.\",\n    \"Require a second approver sign-off if rollback risk score > 6.\",\n  ],\n  \"functional testing\": [\n    \"Triage defect clusters by component — high-density areas need re-testing.\",\n    \"Do not promote builds with defect density above threshold to staging.\",\n  ],\n  \"integration testing\": [\n    \"Rerun the full regression suite if any new service dependencies were added.\",\n    \"Add a flakiness check: flag tests with >5% failure rate for stabilization.\",\n  ],\n};\n\nconst stageKey = sdlcStage.toLowerCase();\nconst tips = remediationMap[stageKey] || [\n  \"Review historical failure patterns for this stage.\",\n  \"Align with the team lead before proceeding.\",\n  \"Document any deviations from process in the sprint log.\",\n];\n\nconst remediationBlock = tips.map((t, i) => `${i + 1}. ${t}`).join(\"\\n\");\n\nconst message = `\n${statusEmoji} **PRE-FLIGHT CHECKLIST — ${statusLabel}**\n*Team:* ${teamName} | *Stage:* ${sdlcStage} | *Generated:* ${timestamp}\n\n---\n\n**Historical pitfalls detected for this stage:**\n\n${metricRows}\n\n---\n\n**Recommended actions before proceeding:**\n\n${remediationBlock}\n\n---\n\n> 🔁 This checklist was auto-generated from last quarter's metrics. Resolve flagged items or document mitigations in your sprint log before advancing.\n`.trim();\n\nreturn [{ json: { message, status: overallStatus, teamName, sdlcStage } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        96
+      ],
+      "id": "38f59dd0-eced-4244-b0d2-feac04ee5872",
+      "name": "Alert Message"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        832,
+        -16
+      ],
+      "id": "efab1725-7920-489b-b7fd-75e45fca1193",
+      "name": "MergeBranch"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: $json.status, team: $json.teamName, stage: $json.sdlcStage, notification: $json.message }) \n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1040,
+        -16
+      ],
+      "id": "47947087-4557-466d-87b9-fbb6025fb55f",
+      "name": "Send Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4434bd98-f39f-4423-9d46-6d6a20296eec",
+              "leftValue": "={{ $json.overallStatus }}",
+              "rightValue": "Good",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "db98d135-0323-4ceb-844a-4cb0a688ecce",
+      "name": "Status Check"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "DataLookUp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataLookUp": {
+      "main": [
+        [
+          {
+            "node": "Status Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Message": {
+      "main": [
+        [
+          {
+            "node": "MergeBranch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OK Message": {
+      "main": [
+        [
+          {
+            "node": "MergeBranch",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "MergeBranch": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Check": {
+      "main": [
+        [
+          {
+            "node": "OK Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "92803bf3-5a57-44ce-8997-67379544b1db",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "16594973a84e0c32e11f0c41e87022ae271db97e07e56f4a1b61b2554dceaa0d"
+  },
+  "id": "Bn4o2XRpIolSSAPs",
+  "tags": []
+}
